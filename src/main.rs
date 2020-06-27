@@ -36,8 +36,8 @@ impl CommandBot {
     pub fn new(client: Client) -> Self {
         Self {
             client,
-            //ipfs_client: IpfsClient::from_str("http://172.27.0.1:5001").unwrap(),
-            ipfs_client: Default::default(),
+            ipfs_client: IpfsClient::from_str("http://172.27.0.1:5001").unwrap(),
+            //ipfs_client: Default::default(),
         }
     }
 
@@ -97,7 +97,6 @@ impl CommandBot {
         let hash = ipfs_resp.first().unwrap().hash.clone();
         self.ipfs_client.pin_add(&hash, true);
 
-
         hash
     }
 }
@@ -130,10 +129,10 @@ impl EventEmitter for CommandBot {
                         .filter(|x| {
                             (**x).event_id
                                 == related_event_original
-                                .as_ref()
-                                .unwrap()
-                                .in_reply_to
-                                .event_id
+                                    .as_ref()
+                                    .unwrap()
+                                    .in_reply_to
+                                    .event_id
                         })
                         .map(|x| (**x).clone())
                         .collect();
@@ -159,7 +158,9 @@ impl EventEmitter for CommandBot {
                                     .receive_joined_timeline_event(&room_id, &mut resp.event)
                                     .await
                                     .unwrap();
-                                if let Ok(RoomEvent::RoomMessage(msg_event)) = event.unwrap().deserialize() {
+                                if let Ok(RoomEvent::RoomMessage(msg_event)) =
+                                    event.unwrap().deserialize()
+                                {
                                     related_events.push(msg_event);
                                 }
                             }
@@ -187,7 +188,7 @@ impl EventEmitter for CommandBot {
                                                 image_event.file.unwrap().url,
                                                 filename.clone(),
                                             )
-                                                .await
+                                            .await
                                         }
                                         Some(url) => self.handle_media(url, filename.clone()).await,
                                     };
@@ -199,7 +200,7 @@ impl EventEmitter for CommandBot {
                                         hash,
                                         related_event_original.clone(),
                                     )
-                                        .await;
+                                    .await;
 
                                     info!("image event message sent");
                                 }
@@ -208,26 +209,25 @@ impl EventEmitter for CommandBot {
 
                                     // Saving video
                                     let filename = video_event.body.clone();
-                                    let ipfs_resp = match video_event.url {
+                                    let hash = match video_event.url {
                                         None => {
                                             self.handle_media(
                                                 video_event.file.unwrap().url,
                                                 filename.clone(),
                                             )
-                                                .await
+                                            .await
                                         }
                                         Some(url) => self.handle_media(url, filename.clone()).await,
                                     };
 
                                     // Sending link
-                                    let hash = ipfs_resp.first().unwrap().hash.clone();
                                     self.send_link(
                                         &room_id,
                                         filename.clone(),
                                         hash,
                                         related_event_original.clone(),
                                     )
-                                        .await;
+                                    .await;
 
                                     info!("video event message sent");
                                 }
@@ -236,26 +236,25 @@ impl EventEmitter for CommandBot {
 
                                     // Saving file
                                     let filename = file_event.body.clone();
-                                    let ipfs_resp = match file_event.url {
+                                    let hash = match file_event.url {
                                         None => {
                                             self.handle_media(
                                                 file_event.file.unwrap().url,
                                                 filename.clone(),
                                             )
-                                                .await
+                                            .await
                                         }
                                         Some(url) => self.handle_media(url, filename.clone()).await,
                                     };
 
                                     // Sending link
-                                    let hash = ipfs_resp.first().unwrap().hash.clone();
                                     self.send_link(
                                         &room_id,
                                         filename.clone(),
                                         hash,
                                         related_event_original.clone(),
                                     )
-                                        .await;
+                                    .await;
 
                                     info!("file event message sent");
                                 }
@@ -264,26 +263,25 @@ impl EventEmitter for CommandBot {
 
                                     // Saving audio
                                     let filename = audio_event.body.clone();
-                                    let ipfs_resp = match audio_event.url {
+                                    let hash = match audio_event.url {
                                         None => {
                                             self.handle_media(
                                                 audio_event.file.unwrap().url,
                                                 filename.clone(),
                                             )
-                                                .await
+                                            .await
                                         }
                                         Some(url) => self.handle_media(url, filename.clone()).await,
                                     };
 
                                     // Sending link
-                                    let hash = ipfs_resp.first().unwrap().hash.clone();
                                     self.send_link(
                                         &room_id,
                                         filename.clone(),
                                         hash,
                                         related_event_original.clone(),
                                     )
-                                        .await;
+                                    .await;
 
                                     info!("audio event message sent");
                                 }
@@ -370,8 +368,7 @@ async fn main() -> Result<(), matrix_sdk::Error> {
         // completes the builder.
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     let (homeserver_url, username, password) =
         match (env::args().nth(1), env::args().nth(2), env::args().nth(3)) {
