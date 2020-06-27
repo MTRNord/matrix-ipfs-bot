@@ -95,7 +95,7 @@ impl CommandBot {
         self.remove_file(raw_filename);
 
         let hash = ipfs_resp.first().unwrap().hash.clone();
-        self.ipfs_client.pin_add(&hash, true);
+        self.ipfs_client.pin_add(&hash, true).await;
 
         hash
     }
