@@ -9,9 +9,9 @@ edition = "2018"
 [dependencies]
 ipfs-api = "0.7.2"
 tokio = { version = "0.2", features = ["full"] }
-matrix-sdk = {version = "0.1.0", git = "https://github.com/matrix-org/matrix-rust-sdk", features = ["messages"]}
-matrix-sdk-common-macros = {version = "0.1.0", git = "https://github.com/matrix-org/matrix-rust-sdk"}
-matrix-sdk-common = {version = "0.1.0", git = "https://github.com/matrix-org/matrix-rust-sdk"}
+matrix-sdk = {version = "0.1.0", git = "https://github.com/MTRNord/matrix-rust-sdk", branch="expose-base_client"}
+matrix-sdk-common-macros = {version = "0.1.0", git = "https://github.com/MTRNord/matrix-rust-sdk", branch="expose-base_client"}
+matrix-sdk-common = {version = "0.1.0", git = "https://github.com/MTRNord/matrix-rust-sdk", branch="expose-base_client"}
 url = "2.1.1"
 dirs = "2.0.2"
 tracing-subscriber = "0.2.5"

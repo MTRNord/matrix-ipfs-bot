@@ -972,7 +972,7 @@ dependencies = [
 [[package]]
 name = "matrix-sdk"
 version = "0.1.0"
-source = "git+https://github.com/matrix-org/matrix-rust-sdk#8b13602b3b7edd85575a99e5445d5b5cc4afad91"
+source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=expose-base_client#f11a88de8e5850a68a323934891283c675ff9ada"
 dependencies = [
  "futures-timer",
  "http",
@@ -990,7 +990,7 @@ dependencies = [
 [[package]]
 name = "matrix-sdk-base"
 version = "0.1.0"
-source = "git+https://github.com/matrix-org/matrix-rust-sdk#8b13602b3b7edd85575a99e5445d5b5cc4afad91"
+source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=expose-base_client#f11a88de8e5850a68a323934891283c675ff9ada"
 dependencies = [
  "async-trait",
  "matrix-sdk-common",
@@ -1006,7 +1006,7 @@ dependencies = [
 [[package]]
 name = "matrix-sdk-common"
 version = "0.1.0"
-source = "git+https://github.com/matrix-org/matrix-rust-sdk#8b13602b3b7edd85575a99e5445d5b5cc4afad91"
+source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=expose-base_client#f11a88de8e5850a68a323934891283c675ff9ada"
 dependencies = [
  "futures-locks",
  "instant",
@@ -1022,7 +1022,7 @@ dependencies = [
 [[package]]
 name = "matrix-sdk-common-macros"
 version = "0.1.0"
-source = "git+https://github.com/matrix-org/matrix-rust-sdk#8b13602b3b7edd85575a99e5445d5b5cc4afad91"
+source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=expose-base_client#f11a88de8e5850a68a323934891283c675ff9ada"
 dependencies = [
  "quote",
  "syn",
@@ -1031,7 +1031,7 @@ dependencies = [
 [[package]]
 name = "matrix-sdk-crypto"
 version = "0.1.0"
-source = "git+https://github.com/matrix-org/matrix-rust-sdk#8b13602b3b7edd85575a99e5445d5b5cc4afad91"
+source = "git+https://github.com/MTRNord/matrix-rust-sdk?branch=expose-base_client#f11a88de8e5850a68a323934891283c675ff9ada"
 dependencies = [
  "async-trait",
  "atomic",

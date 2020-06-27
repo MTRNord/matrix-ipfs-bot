@@ -1,21 +1,21 @@
-use std::{env, fs, process::exit};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::{env, fs, process::exit};
 
 use bytes::buf::Buf;
-use ipfs_api::{IpfsClient, TryFromUri};
 use ipfs_api::response::AddResponse;
+use ipfs_api::{IpfsClient, TryFromUri};
 use matrix_sdk::{
     self,
-    Client,
-    ClientConfig,
-    EventEmitter, events::collections::all::RoomEvent, events::room::message::{
+    events::collections::all::RoomEvent,
+    events::room::message::{
         MessageEvent, MessageEventContent, NoticeMessageEventContent, RelatesTo,
-    }, identifiers::RoomId, SyncRoom,
-    SyncSettings
+    },
+    identifiers::RoomId,
+    Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
 };
-use tracing::{debug, info, Level, warn};
+use tracing::{debug, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 use url::Url;
 
@@ -37,7 +37,7 @@ impl CommandBot {
         Self {
             client,
             //ipfs_client: IpfsClient::from_str("http://172.27.0.1:5001").unwrap(),
-            ipfs_client: Default::default()
+            ipfs_client: Default::default(),
         }
     }
 
@@ -59,7 +59,13 @@ impl CommandBot {
         fs::remove_file(filename).unwrap();
     }
 
-    async fn send_link(&self, room_id: &RoomId, filename: String, hash: String, related_event_original: Option<RelatesTo>) {
+    async fn send_link(
+        &self,
+        room_id: &RoomId,
+        filename: String,
+        hash: String,
+        related_event_original: Option<RelatesTo>,
+    ) {
         let content = MessageEventContent::Notice(NoticeMessageEventContent {
             body: format!("https://ipfs.io/ipfs/{}?filename={}", hash, filename),
             format: None,
@@ -75,7 +81,7 @@ impl CommandBot {
             .unwrap();
     }
 
-    async fn handle_media(&self, mxc_url: String, raw_filename: String) -> Vec<AddResponse> {
+    async fn handle_media(&self, mxc_url: String, raw_filename: String) -> String {
         let download_url = get_media_download_url(self.client.homeserver(), mxc_url);
 
         let response = reqwest::get(&download_url).await.unwrap();
@@ -86,10 +92,13 @@ impl CommandBot {
 
         let filename = self.get_temp_file(raw_filename.clone());
         let ipfs_resp = self.ipfs_client.add_path(&filename).await.unwrap();
-
         self.remove_file(raw_filename);
 
-        ipfs_resp
+        let hash = ipfs_resp.first().unwrap().hash.clone();
+        self.ipfs_client.pin_add(&hash, true);
+
+
+        hash
     }
 }
 
@@ -101,9 +110,14 @@ impl EventEmitter for CommandBot {
                 // reply to an event with a file attachment with !ipfs, and have the bot reply with an ipfs link
                 // TODO config
 
-                let msg_body = text_event.body;
+                let msg_body = text_event.body.clone();
+                println!("new text message: {}", msg_body.clone());
+                println!("text_event: {:?}", text_event.clone());
+
+                // TODO fix e2ee relates_to with something like https://github.com/matrix-org/matrix-rust-sdk/blob/master/matrix_sdk_base/src/client.rs#L93 inside of receive_joined_timeline_event
 
                 if msg_body.contains("!ipfs") && text_event.relates_to.is_some() {
+                    println!("new !ipfs message");
                     let related_event_original = text_event.relates_to.clone();
 
                     // we clone here to hold the lock for as little time as possible.
@@ -138,10 +152,14 @@ impl EventEmitter for CommandBot {
                             .await;
 
                         match resp {
-                            Ok(resp) => {
-                                if let Ok(RoomEvent::RoomMessage(msg_event)) =
-                                resp.event.deserialize()
-                                {
+                            Ok(mut resp) => {
+                                let (event, _updated) = self
+                                    .client
+                                    .base_client
+                                    .receive_joined_timeline_event(&room_id, &mut resp.event)
+                                    .await
+                                    .unwrap();
+                                if let Ok(RoomEvent::RoomMessage(msg_event)) = event.unwrap().deserialize() {
                                     related_events.push(msg_event);
                                 }
                             }
@@ -163,7 +181,7 @@ impl EventEmitter for CommandBot {
 
                                     // Saving image
                                     let filename = image_event.body.clone();
-                                    let ipfs_resp = match image_event.url {
+                                    let hash = match image_event.url {
                                         None => {
                                             self.handle_media(
                                                 image_event.file.unwrap().url,
@@ -175,13 +193,13 @@ impl EventEmitter for CommandBot {
                                     };
 
                                     // Sending link
-                                    let hash = ipfs_resp.first().unwrap().hash.clone();
                                     self.send_link(
                                         &room_id,
                                         filename.clone(),
                                         hash,
                                         related_event_original.clone(),
-                                    ).await;
+                                    )
+                                        .await;
 
                                     info!("image event message sent");
                                 }
@@ -208,7 +226,8 @@ impl EventEmitter for CommandBot {
                                         filename.clone(),
                                         hash,
                                         related_event_original.clone(),
-                                    ).await;
+                                    )
+                                        .await;
 
                                     info!("video event message sent");
                                 }
@@ -235,7 +254,8 @@ impl EventEmitter for CommandBot {
                                         filename.clone(),
                                         hash,
                                         related_event_original.clone(),
-                                    ).await;
+                                    )
+                                        .await;
 
                                     info!("file event message sent");
                                 }
@@ -262,7 +282,8 @@ impl EventEmitter for CommandBot {
                                         filename.clone(),
                                         hash,
                                         related_event_original.clone(),
-                                    ).await;
+                                    )
+                                        .await;
 
                                     info!("audio event message sent");
                                 }
@@ -325,10 +346,6 @@ async fn login_and_sync(
 
     println!("logged in as {}", username);
 
-    // An initial sync to set up state and so our bot doesn't respond to old messages.
-    // If the `StateStore` finds saved state in the location given the initial sync will
-    // be skipped in favor of loading state from the store
-    client.sync(SyncSettings::default()).await.unwrap();
     // add our CommandBot to be notified of incoming messages, we do this after the initial
     // sync to avoid responding to messages before the bot was running.
     client
@@ -337,7 +354,7 @@ async fn login_and_sync(
 
     // since we called sync before we `sync_forever` we must pass that sync token to
     // `sync_forever`
-    let settings = SyncSettings::default().token(client.sync_token().await.unwrap());
+    let settings = SyncSettings::default();
     // this keeps state from the server streaming in to CommandBot via the EventEmitter trait
     client.sync_forever(settings, |_| async {}).await;
 
@@ -346,15 +363,15 @@ async fn login_and_sync(
 
 #[tokio::main]
 async fn main() -> Result<(), matrix_sdk::Error> {
-    /*let subscriber = FmtSubscriber::builder()
+    let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
-        .with_max_level(Level::INFO)
+        .with_max_level(Level::DEBUG)
         // completes the builder.
         .finish();
 
     tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");*/
+        .expect("setting default subscriber failed");
 
     let (homeserver_url, username, password) =
         match (env::args().nth(1), env::args().nth(2), env::args().nth(3)) {
