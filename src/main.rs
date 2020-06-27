@@ -117,23 +117,16 @@ impl EventEmitter for CommandBot {
         _: &StrippedRoomMember,
         _: Option<MemberEventContent>,
     ) {
-        println!("room: {:?}", room);
         if let SyncRoom::Invited(room) = room {
             let room_id = room.read().await.room_id.clone();
-            println!("room_id: {:?}", &room_id);
             let resp = self.client.join_room_by_id(&room_id).await.unwrap();
-            println!("JoinResp: {:?}", resp);
         }
     }
     async fn on_room_message(&self, room: SyncRoom, event: &MessageEvent) {
         if let SyncRoom::Joined(room) = room {
             if let MessageEventContent::Text(text_event) = event.clone().content {
-                // reply to an event with a file attachment with !ipfs, and have the bot reply with an ipfs link
-                // TODO config
 
                 let msg_body = text_event.body.clone();
-                println!("new text message: {}", msg_body.clone());
-                println!("text_event: {:?}", text_event.clone());
 
                 // TODO fix e2ee relates_to with something like https://github.com/matrix-org/matrix-rust-sdk/blob/master/matrix_sdk_base/src/client.rs#L93 inside of receive_joined_timeline_event
 
