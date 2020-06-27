@@ -1,43 +1,48 @@
-use std::fs::File;
+use std::convert::TryFrom;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs, process::exit};
 
 use bytes::buf::Buf;
-use ipfs_api::response::AddResponse;
 use ipfs_api::{IpfsClient, TryFromUri};
 use matrix_sdk::{
     self,
     events::collections::all::RoomEvent,
-    events::room::message::{
-        MessageEvent, MessageEventContent, NoticeMessageEventContent, RelatesTo,
+    events::room::{
+        member::MemberEventContent,
+        message::{MessageEvent, MessageEventContent, NoticeMessageEventContent, RelatesTo},
     },
-    identifiers::RoomId,
-    Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
+    events::stripped::StrippedRoomMember,
+    identifiers::{RoomId, UserId},
+    Client, ClientConfig, EventEmitter, Session as SDKSession, SyncRoom, SyncSettings,
 };
-use tracing::{debug, info, warn, Level};
+use tracing::{info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 use url::Url;
 
-use crate::utils::get_media_download_url;
+use crate::config::Config;
+use crate::utils::{get_media_download_url, Session};
 
-mod utils;
-
+mod config;
 mod get_room_event;
+mod utils;
 
 struct CommandBot {
     /// This clone of the `Client` will send requests to the server,
     /// while the other keeps us in sync with the server using `sync_forever`.
     client: Client,
     ipfs_client: IpfsClient,
+    config: Config,
 }
 
 impl CommandBot {
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: Client, config: Config) -> Self {
+        let ipfs_client = IpfsClient::from_str(&config.ipfs_api).unwrap();
         Self {
             client,
-            ipfs_client: IpfsClient::from_str("http://172.27.0.1:5001").unwrap(),
-            //ipfs_client: Default::default(),
+            ipfs_client,
+            config,
         }
     }
 
@@ -67,7 +72,10 @@ impl CommandBot {
         related_event_original: Option<RelatesTo>,
     ) {
         let content = MessageEventContent::Notice(NoticeMessageEventContent {
-            body: format!("https://ipfs.io/ipfs/{}?filename={}", hash, filename),
+            body: format!(
+                "{}/ipfs/{}?filename={}",
+                self.config.ipfs_gateway, hash, filename
+            ),
             format: None,
             formatted_body: None,
             relates_to: related_event_original,
@@ -95,7 +103,7 @@ impl CommandBot {
         self.remove_file(raw_filename);
 
         let hash = ipfs_resp.first().unwrap().hash.clone();
-        self.ipfs_client.pin_add(&hash, true).await;
+        self.ipfs_client.pin_add(&hash, true).await.unwrap();
 
         hash
     }
@@ -103,6 +111,20 @@ impl CommandBot {
 
 #[matrix_sdk_common_macros::async_trait]
 impl EventEmitter for CommandBot {
+    async fn on_stripped_state_member(
+        &self,
+        room: SyncRoom,
+        _: &StrippedRoomMember,
+        _: Option<MemberEventContent>,
+    ) {
+        println!("room: {:?}", room);
+        if let SyncRoom::Invited(room) = room {
+            let room_id = room.read().await.room_id.clone();
+            println!("room_id: {:?}", &room_id);
+            let resp = self.client.join_room_by_id(&room_id).await.unwrap();
+            println!("JoinResp: {:?}", resp);
+        }
+    }
     async fn on_room_message(&self, room: SyncRoom, event: &MessageEvent) {
         if let SyncRoom::Joined(room) = room {
             if let MessageEventContent::Text(text_event) = event.clone().content {
@@ -152,16 +174,28 @@ impl EventEmitter for CommandBot {
 
                         match resp {
                             Ok(mut resp) => {
+                                println!("{:?}", resp.event.deserialize());
                                 let (event, _updated) = self
                                     .client
                                     .base_client
                                     .receive_joined_timeline_event(&room_id, &mut resp.event)
                                     .await
                                     .unwrap();
-                                if let Ok(RoomEvent::RoomMessage(msg_event)) =
-                                    event.unwrap().deserialize()
-                                {
-                                    related_events.push(msg_event);
+                                match event {
+                                    Some(event) => {
+                                        if let Ok(RoomEvent::RoomMessage(msg_event)) =
+                                            event.deserialize()
+                                        {
+                                            related_events.push(msg_event);
+                                        }
+                                    }
+                                    None => {
+                                        if let Ok(RoomEvent::RoomMessage(msg_event)) =
+                                            resp.event.deserialize()
+                                        {
+                                            related_events.push(msg_event);
+                                        }
+                                    }
                                 }
                             }
                             Err(e) => {
@@ -307,6 +341,20 @@ impl EventEmitter for CommandBot {
                             }
                         }
                     } else {
+                        let content = MessageEventContent::Notice(NoticeMessageEventContent {
+                            body: "Unable to find related event!".to_string(),
+                            format: None,
+                            formatted_body: None,
+                            relates_to: related_event_original.clone(),
+                        });
+
+                        self.client
+                            // send our message to the room we found the "!party" command in
+                            // the last parameter is an optional Uuid which we don't care about.
+                            .room_send(&room_id, content, None)
+                            .await
+                            .unwrap();
+
                         warn!("Unable to find related_event");
                     }
                 }
@@ -333,21 +381,49 @@ async fn login_and_sync(
     // create a new Client with the given homeserver url and config
     let mut client = Client::new_with_config(homeserver_url, client_config).unwrap();
 
-    client
-        .login(
-            username.clone(),
-            password,
-            None,
-            Some("ipfs bot".to_string()),
-        )
-        .await?;
+    let mut session = home.clone();
+    session.push("session.json");
+    if session.exists() {
+        let f = OpenOptions::new().read(true).open(&session).unwrap();
+        let json: Session = serde_json::from_reader(f).expect("file should be proper JSON");
+        let session = SDKSession {
+            access_token: json.access_token,
+            user_id: UserId::try_from(json.user_id).unwrap(),
+            device_id: json.device_id,
+        };
+        client.restore_login(session).await.unwrap();
+    } else {
+        let f = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&session)
+            .unwrap();
+
+        let login_response = client
+            .login(
+                username.clone(),
+                password,
+                None,
+                Some("ipfs bot".to_string()),
+            )
+            .await?;
+
+        let session = Session {
+            access_token: login_response.access_token,
+            user_id: login_response.user_id.to_string(),
+            device_id: login_response.device_id,
+        };
+
+        serde_json::to_writer(&f, &session).unwrap();
+    }
 
     println!("logged in as {}", username);
 
     // add our CommandBot to be notified of incoming messages, we do this after the initial
     // sync to avoid responding to messages before the bot was running.
     client
-        .add_event_emitter(Box::new(CommandBot::new(client.clone())))
+        .add_event_emitter(Box::new(CommandBot::new(client.clone(), Config::load())))
         .await;
 
     // since we called sync before we `sync_forever` we must pass that sync token to

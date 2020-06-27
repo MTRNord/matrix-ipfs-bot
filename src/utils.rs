@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub fn get_media_download_url(homeserver: &Url, mxc_url: String) -> String {
@@ -9,4 +10,14 @@ pub fn get_media_download_url(homeserver: &Url, mxc_url: String) -> String {
     let mut new_url = homeserver.clone();
     new_url.set_path(new_path.as_str());
     new_url.to_string()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Session {
+    /// The access token used for this session.
+    pub access_token: String,
+    /// The user the access token was issued for.
+    pub user_id: String,
+    /// The ID of the client device
+    pub device_id: String,
 }

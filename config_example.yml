@@ -1,0 +1,2 @@
+ipfs_gateway: "https://cloudflare-ipfs.com"
+ipfs_api: "http://localhost:5001"

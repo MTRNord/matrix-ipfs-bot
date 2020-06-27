@@ -19,5 +19,7 @@ async-trait = "0.1.31"
 tracing = "0.1"
 ruma-api = "0.16.1"
 serde = "1.0.114"
+serde_json = "1.0.48"
+serde_yaml = "0.8"
 reqwest = { version = "0.10", features = ["json"] }
 bytes = "0.5"
