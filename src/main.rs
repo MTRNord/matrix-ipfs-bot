@@ -10,6 +10,8 @@ use matrix_sdk::{
     self,
     events::collections::all::RoomEvent,
     events::room::{
+        ThumbnailInfo,
+        ImageInfo,
         member::MemberEventContent,
         message::{MessageEvent, MessageEventContent, NoticeMessageEventContent, RelatesTo},
     },
@@ -90,7 +92,7 @@ impl CommandBot {
     }
 
     async fn handle_media(&self, mxc_url: String, raw_filename: String) -> String {
-        let download_url = get_media_download_url(self.client.homeserver(), mxc_url);
+        let download_url = get_media_download_url(mxc_url);
 
         let response = reqwest::get(&download_url).await.unwrap();
 
@@ -119,13 +121,14 @@ impl EventEmitter for CommandBot {
     ) {
         if let SyncRoom::Invited(room) = room {
             let room_id = room.read().await.room_id.clone();
-            let resp = self.client.join_room_by_id(&room_id).await.unwrap();
+            self.client.join_room_by_id(&room_id).await.unwrap();
         }
     }
     async fn on_room_message(&self, room: SyncRoom, event: &MessageEvent) {
         if let SyncRoom::Joined(room) = room {
             if let MessageEventContent::Text(text_event) = event.clone().content {
-
+                let test = serde_json::from_str::<ImageInfo>(r#"{"mimetype":"image/jpeg", "w":4998, "h":3333,"size":6467842}"#);
+                println!("{:?}", test);
                 let msg_body = text_event.body.clone();
 
                 // TODO fix e2ee relates_to with something like https://github.com/matrix-org/matrix-rust-sdk/blob/master/matrix_sdk_base/src/client.rs#L93 inside of receive_joined_timeline_event
@@ -164,6 +167,8 @@ impl EventEmitter for CommandBot {
                                     .event_id,
                             })
                             .await;
+
+                        println!("event: {:?}", resp);
 
                         match resp {
                             Ok(mut resp) => {
